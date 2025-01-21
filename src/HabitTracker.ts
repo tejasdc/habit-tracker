@@ -291,16 +291,39 @@ export default class HabitTracker {
 
 	// get streak
 	// based on an array of dates, get the current streak for the given date
-	findStreak(entries, date) {
+	async findStreak(entries, date, path) {
 		let currentDate = new Date(date);
-		let streak = 0
+		let streak = 0;
+		let skipsThisWeek = 0;
+		let lastWeek = this.getWeekNumber(currentDate);
 
-		// console.log('entries', entries)
-		// console.log('date', date)
+		const frontmatter = await this.getFrontmatter(path);
+		const maxSkipsPerWeek = frontmatter.maxSkipsPerWeek || 0;
 
-		while (entries.includes(this.getDateId(currentDate))) {
-			streak++
-			currentDate.setDate(currentDate.getDate() - 1)
+		while (true) {
+			const dateId = this.getDateId(currentDate);
+			const currentWeek = this.getWeekNumber(currentDate);
+
+			// Reset skip counter when week changes
+			if (currentWeek !== lastWeek) {
+				skipsThisWeek = 0;
+				lastWeek = currentWeek;
+			}
+
+			// Check if date is missing but we can skip it
+			if (!entries.includes(dateId) && skipsThisWeek < maxSkipsPerWeek) {
+				skipsThisWeek++;
+				currentDate.setDate(currentDate.getDate() - 1);
+				continue;
+			}
+
+			// If date is not in entries and we can't skip, break the streak
+			if (!entries.includes(dateId)) {
+				break;
+			}
+
+			streak++;
+			currentDate.setDate(currentDate.getDate() - 1);
 		}
 
 		return streak.toString();
@@ -352,6 +375,15 @@ export default class HabitTracker {
 			new Notice(`${PLUGIN_NAME}: could not save changes`)
 			return Promise.reject(error)
 		}
+	}
+
+
+	getWeekNumber(date) {
+		const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+		const dayNum = d.getUTCDay() || 7;
+		d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+		const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+		return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
 	}
 
 	removeAllChildNodes(parent) {
